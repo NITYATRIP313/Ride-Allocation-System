@@ -1,356 +1,202 @@
 "use client"
 
-// FILE PATH: app/user/page.tsx
-
-import { useState, useEffect } from "react"
-import { MapPin, Navigation, Car, Clock, User, Star, Phone, MessageSquare, Bell } from "lucide-react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Car, Eye, EyeOff, LogIn, User, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Navbar } from "@/components/navbar"
-import { StatusBadge } from "@/components/status-badge"
-import { TaxiLoader } from "@/components/taxi-loader"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { useRide } from "@/context/ride-context"
 import { supabase } from "@/lib/supabase"
-import Link from "next/link"
 
-export default function UserDashboard() {
-  const [pickupLocation, setPickupLocation] = useState("")
-  const [dropLocation, setDropLocation] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const { currentRide, setCurrentRide, updateEta, clearRide } = useRide()
+type UserRole = "rider" | "driver"
+
+export default function LoginPage() {
+  const router = useRouter()
   const { toast } = useToast()
 
-  // ETA countdown
-  useEffect(() => {
-    if (currentRide && currentRide.status === "assigned" && currentRide.etaMinutes && currentRide.etaMinutes > 0) {
-      const timer = setInterval(() => {
-        if (currentRide.etaMinutes && currentRide.etaMinutes > 1) {
-          updateEta(currentRide.etaMinutes - 1)
-        } else if (currentRide.etaMinutes === 1) {
-          setCurrentRide({ ...currentRide, status: "arrived", etaMinutes: 0 })
-          toast({ title: "Driver Has Arrived!", description: "Your driver is waiting at the pickup location." })
-        }
-      }, 60000)
-      return () => clearInterval(timer)
+  const [role, setRole] = useState<UserRole>("rider")
+  const [userId, setUserId] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleLogin = async () => {
+    if (!userId.trim() || !password.trim()) {
+      toast({ title: "Missing Fields", description: "Please enter your User ID and password.", variant: "destructive" })
+      return
     }
-  }, [currentRide, updateEta, setCurrentRide, toast])
 
-  // Restore form values
-  useEffect(() => {
-    if (currentRide?.pickupLocation && currentRide?.dropLocation) {
-      setPickupLocation(currentRide.pickupLocation)
-      setDropLocation(currentRide.dropLocation)
-    }
-  }, [currentRide])
-
-  // ── Fetch a random available driver from DB ──────────────────────────────
-  const fetchRandomDriver = async () => {
-    try {
-      // Get all available drivers with their user info and vehicle
-      const { data: drivers } = await supabase
-        .from("DRIVER")
-        .select(`
-          driver_id, license_number, experience_years, status,
-          USER:user_id(name, phone),
-          VEHICLE:driver_id(model, vehicle_number, vehicle_type, color)
-        `)
-        .eq("status", "available")
-
-      if (!drivers || drivers.length === 0) return null
-
-      // Pick a random one
-      const d = drivers[Math.floor(Math.random() * drivers.length)] as any
-      const user = d.USER
-      const vehicle = Array.isArray(d.VEHICLE) ? d.VEHICLE[0] : d.VEHICLE
-
-      return {
-        name: user?.name || "Driver",
-        phone: user?.phone || "9999999999",
-        rating: 4.5 + Math.random() * 0.5, // mock rating since not in schema
-        vehicle: vehicle ? `${vehicle.model} - ${vehicle.color || "White"}` : "Sedan",
-        licensePlate: vehicle?.vehicle_number || "XX 00 XX 0000",
-      }
-    } catch {
-      return null
-    }
-  }
-
-  const handleRequestRide = async () => {
-    if (!pickupLocation.trim() || !dropLocation.trim()) {
-      toast({ title: "Missing Information", description: "Please enter both pickup and drop locations.", variant: "destructive" })
+    const parsedId = parseInt(userId, 10)
+    if (isNaN(parsedId)) {
+      toast({ title: "Invalid User ID", description: "User ID must be a number.", variant: "destructive" })
       return
     }
 
     setIsLoading(true)
-    const rideId = `RR-${Date.now()}`
-    const bookedAt = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
-    const userId = localStorage.getItem("userId") || "1"
-
-    setCurrentRide({ id: rideId, pickupLocation, dropLocation, status: "searching", bookedAt })
 
     try {
-      await fetch("/api/ride-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pickup_location: pickupLocation, drop_location: dropLocation, user_id: userId }),
-      })
-    } catch { /* continue */ }
+      const { data, error } = await supabase
+        .from("USER")
+        .select("user_id, name, user_type, password")
+        .eq("user_id", parsedId)
+        .eq("user_type", role === "rider" ? "rider" : "driver")
+        .single()
 
-    // Fetch real random driver while "searching"
-    const driver = await fetchRandomDriver()
-    const estimatedFare = Math.floor(Math.random() * 200) + 150
-    const etaMinutes = Math.floor(Math.random() * 5) + 5
+      if (error || !data) {
+        toast({ title: "User Not Found", description: `No ${role} account found with ID ${parsedId}.`, variant: "destructive" })
+        setIsLoading(false)
+        return
+      }
 
-    // Fallback drivers from seed if DB returns nothing
-    const fallbackDrivers = [
-      { name: "Nityanshu Tripathi", phone: "9988776655", rating: 4.8, vehicle: "Swift Dzire - White", licensePlate: "TN01AB1234" },
-      { name: "Rajesh Kumar",       phone: "9877665544", rating: 4.9, vehicle: "Honda City - Silver", licensePlate: "MH02CD5678" },
-      { name: "Suresh Yadav",       phone: "9766554433", rating: 4.6, vehicle: "Maruti Ertiga - Grey", licensePlate: "KA03EF9012" },
-      { name: "Amit Pandey",        phone: "9655443322", rating: 4.7, vehicle: "Toyota Innova - White", licensePlate: "TN04GH3456" },
-      { name: "Manoj Tiwari",       phone: "9433221100", rating: 4.8, vehicle: "Tata Nexon - Blue", licensePlate: "GJ06KL1234" },
-      { name: "Prakash Reddy",      phone: "9211009988", rating: 4.5, vehicle: "Wagon R - Red", licensePlate: "AP08OP9012" },
-    ]
-    const assignedDriver = driver || fallbackDrivers[Math.floor(Math.random() * fallbackDrivers.length)]
+      if (data.password !== password) {
+        toast({ title: "Incorrect Password", description: "The password you entered is wrong. Please try again.", variant: "destructive" })
+        setIsLoading(false)
+        return
+      }
 
-    setTimeout(() => {
-      setCurrentRide({
-        id: rideId,
-        pickupLocation,
-        dropLocation,
-        status: "assigned",
-        driver: assignedDriver,
-        estimatedFare,
-        etaMinutes,
-        bookedAt,
-      })
+      localStorage.setItem("userId", String(data.user_id))
+      localStorage.setItem("userName", data.name)
+      localStorage.setItem("userRole", data.user_type)
+
+      toast({ title: `Welcome, ${data.name}!`, description: `Signed in as ${role}.` })
+
+      if (data.user_type === "driver") {
+        router.push("/driver")
+      } else {
+        router.push("/user")
+      }
+    } catch {
+      toast({ title: "Login Failed", description: "Something went wrong. Please try again.", variant: "destructive" })
       setIsLoading(false)
-      toast({ title: "Driver Found!", description: `${assignedDriver.name} is ${etaMinutes} mins away.` })
-    }, 3000)
+    }
   }
 
-  const handleCancelRide = () => {
-    clearRide()
-    setIsLoading(false)
-    setPickupLocation("")
-    setDropLocation("")
-    toast({ title: "Ride Cancelled", description: "Your ride request has been cancelled." })
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleLogin()
   }
-
-  const isRideActive = currentRide && currentRide.status !== "idle" && currentRide.status !== "completed"
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Toaster />
-
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-3xl font-bold text-transparent">
-            Book Your Ride
-          </h1>
-          <p className="mt-2 text-muted-foreground">Enter your pickup and destination to get started</p>
+      <div className="w-full max-w-md space-y-8">
+        <div className="flex flex-col items-center text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg">
+            <Car className="h-8 w-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">RideFlow</h1>
+          <p className="mt-2 text-muted-foreground">Sign in to continue to your dashboard</p>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-2">
-          {/* Booking Form */}
-          <Card className="border-border bg-card shadow-lg transition-shadow hover:shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Car className="h-5 w-5 text-primary" />
-                Request a Ride
-              </CardTitle>
-              <CardDescription>Fill in your journey details below</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="pickup" className="flex items-center gap-2 text-sm font-medium">
-                    <MapPin className="h-4 w-4 text-emerald-500" />
-                    Pickup Location
-                  </Label>
-                  <Input
-                    id="pickup"
-                    placeholder="Enter pickup address"
-                    value={pickupLocation}
-                    onChange={(e) => setPickupLocation(e.target.value)}
-                    disabled={isLoading || !!isRideActive}
-                    className="h-12"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="drop" className="flex items-center gap-2 text-sm font-medium">
-                    <Navigation className="h-4 w-4 text-red-500" />
-                    Drop Location
-                  </Label>
-                  <Input
-                    id="drop"
-                    placeholder="Enter destination address"
-                    value={dropLocation}
-                    onChange={(e) => setDropLocation(e.target.value)}
-                    disabled={isLoading || !!isRideActive}
-                    className="h-12"
-                  />
-                </div>
-
-                {!isRideActive ? (
-                  <Button
-                    onClick={handleRequestRide}
-                    disabled={isLoading}
-                    className="h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                    size="lg"
-                  >
-                    {isLoading ? "Requesting..." : "Request Ride"}
-                  </Button>
-                ) : (
-                  <Button onClick={handleCancelRide} variant="destructive" className="h-12 w-full" size="lg">
-                    Cancel Ride
-                  </Button>
-                )}
+        <Card className="border-border bg-card shadow-xl">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-xl">Sign In</CardTitle>
+            <CardDescription>Select your role and enter your credentials</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">I am a</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setRole("rider")}
+                  className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                    role === "rider"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  <User className="h-4 w-4" />
+                  Rider
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("driver")}
+                  className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                    role === "driver"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  <Car className="h-4 w-4" />
+                  Driver
+                </button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Ride Status */}
-          <Card className="border-border bg-card shadow-lg transition-shadow hover:shadow-xl">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary" />
-                Ride Status
-              </CardTitle>
-              <CardDescription>Track your current ride request</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!currentRide && !isLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                    <Car className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <p className="text-muted-foreground">No active ride request</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Enter your locations and request a ride to get started</p>
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="userId" className="text-sm font-medium">User ID</Label>
+              <Input
+                id="userId"
+                type="number"
+                placeholder={role === "rider" ? "e.g. 1" : "e.g. 13"}
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                className="h-12"
+                min={1}
+              />
+            </div>
 
-              ) : currentRide?.status === "searching" || isLoading ? (
-                <TaxiLoader message="Finding you a driver..." />
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                  className="h-12 pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
 
-              ) : currentRide?.status === "assigned" || currentRide?.status === "arrived" ? (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">Status</span>
-                    <StatusBadge status={currentRide.status === "arrived" ? "arrived" : "assigned"} />
-                  </div>
+            <Button
+              onClick={handleLogin}
+              disabled={isLoading}
+              className="h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              size="lg"
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                  Signing in...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <LogIn className="h-4 w-4" />
+                  Sign In
+                </span>
+              )}
+            </Button>
 
-                  {currentRide.status === "arrived" && (
-                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 dark:bg-emerald-950/30 dark:border-emerald-900">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white animate-pulse">
-                          <Bell className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-emerald-700 dark:text-emerald-400">Driver Has Arrived!</p>
-                          <p className="text-sm text-emerald-600 dark:text-emerald-500">Please meet your driver at the pickup location</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentRide.driver && (
-                    <div className="rounded-xl border border-border bg-muted/30 p-4">
-                      <div className="flex items-start gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                          <User className="h-7 w-7 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-foreground">{currentRide.driver.name}</h4>
-                          <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                            <Star className="h-4 w-4 fill-secondary text-secondary" />
-                            <span>{currentRide.driver.rating.toFixed(1)}</span>
-                          </div>
-                          <p className="mt-2 text-sm text-muted-foreground">{currentRide.driver.vehicle}</p>
-                          <p className="text-sm font-medium text-foreground">{currentRide.driver.licensePlate}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex gap-2">
-                        {/* Real phone number on Call */}
-                        <a href={`tel:${currentRide.driver.phone}`} className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full">
-                            <Phone className="mr-2 h-4 w-4" />
-                            Call
-                          </Button>
-                        </a>
-                        {/* Real phone number on Message (SMS) */}
-                        <a href={`sms:${currentRide.driver.phone}`} className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full">
-                            <MessageSquare className="mr-2 h-4 w-4" />
-                            Message
-                          </Button>
-                        </a>
-                      </div>
-                      <p className="mt-2 text-center text-xs text-muted-foreground">{currentRide.driver.phone}</p>
-                    </div>
-                  )}
-
-                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-                    <div className="flex items-start gap-3">
-                      <MapPin className="mt-0.5 h-5 w-5 text-emerald-500" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Pickup</p>
-                        <p className="text-sm font-medium text-foreground">{currentRide.pickupLocation}</p>
-                      </div>
-                    </div>
-                    <div className="ml-2.5 h-4 border-l-2 border-dashed border-muted" />
-                    <div className="flex items-start gap-3">
-                      <Navigation className="mt-0.5 h-5 w-5 text-red-500" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Drop-off</p>
-                        <p className="text-sm font-medium text-foreground">{currentRide.dropLocation}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-lg bg-muted/30 p-3 text-center">
-                      <p className="text-xs text-muted-foreground">Est. Fare</p>
-                      <p className="text-lg font-semibold text-foreground">₹{currentRide.estimatedFare}</p>
-                    </div>
-                    <div className={`rounded-lg p-3 text-center ${currentRide.status === "arrived" ? "bg-emerald-100 dark:bg-emerald-950/30" : "bg-muted/30"}`}>
-                      <p className="text-xs text-muted-foreground">ETA</p>
-                      <p className={`text-lg font-semibold ${currentRide.status === "arrived" ? "text-emerald-600" : "text-foreground"}`}>
-                        {currentRide.status === "arrived" ? "Arrived!" : `${currentRide.etaMinutes} mins`}
-                      </p>
-                    </div>
-                  </div>
-
-                  <Button asChild className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Link href={`/tracking?id=${currentRide.id}`}>
-                      Track Ride on Map
-                    </Link>
-                  </Button>
-                </div>
-
-              ) : currentRide?.status === "completed" ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                    <Car className="h-8 w-8 text-emerald-600" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Ride Completed!</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Thank you for riding with RideFlow</p>
-                  <div className="mt-4">
-                    <Button asChild variant="outline">
-                      <Link href="/history">View Ride History</Link>
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
-      </main>
+            <div className="rounded-xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
+              <div className="mb-2 flex items-center gap-1.5 font-medium text-foreground">
+                <Shield className="h-3.5 w-3.5" />
+                Demo Credentials
+              </div>
+              <div className="space-y-1">
+                <p><span className="font-medium text-foreground">Rider</span> — ID: 1, pw: <span className="font-mono">harshit123</span></p>
+                <p><span className="font-medium text-foreground">Driver</span> — ID: 13, pw: <span className="font-mono">nitya123</span></p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
