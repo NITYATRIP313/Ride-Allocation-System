@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 
+// FILE PATH: app/api/rides/history/route.ts
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
       .from("RIDE")
       .select(`
         ride_id, start_time, end_time, ride_status, request_id, driver_id,
-        DRIVER:driver_id(driver_id, rating, user_id,
+        DRIVER:driver_id(driver_id, user_id,
           USER:user_id(name)
         )
       `)
@@ -63,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     const { data: fares } = await supabase
       .from("FARE")
-      .select("ride_id, base_amount, distance_charge, time_charge, surge_multiplier")
+      .select("ride_id, base_amount, distance_charge, time_charge, surge_multiplier, total_amount")
       .in("ride_id", rideIds)
 
     const { data: payments } = await supabase
@@ -76,10 +78,13 @@ export async function GET(request: NextRequest) {
       .select("ride_id, score, feedback")
       .in("ride_id", rideIds)
 
-    // Build fare/payment/rating maps
+    // Build maps
     const fareMap: Record<number, { total: number; distanceKm: string; duration: string }> = {}
     fares?.forEach((f) => {
-      const total = Math.round((f.base_amount + f.distance_charge + f.time_charge) * f.surge_multiplier)
+      // Use total_amount from DB directly if available, else recalculate
+      const total = f.total_amount
+        ? Math.round(f.total_amount)
+        : Math.round((f.base_amount + f.distance_charge + f.time_charge) * f.surge_multiplier)
       const distanceKm = (f.distance_charge / 15).toFixed(1)
       fareMap[f.ride_id] = { total, distanceKm, duration: `${Math.floor(f.time_charge / 2)} mins` }
     })
@@ -87,8 +92,8 @@ export async function GET(request: NextRequest) {
     const paymentMap: Record<number, { method: string; status: string }> = {}
     payments?.forEach((p) => { paymentMap[p.ride_id] = { method: p.payment_mode, status: p.payment_status } })
 
-    const ratingMap: Record<number, number> = {}
-    ratings?.forEach((r) => { ratingMap[r.ride_id] = r.score })
+    const ratingMap: Record<number, { score: number; feedback: string }> = {}
+    ratings?.forEach((r) => { ratingMap[r.ride_id] = { score: r.score, feedback: r.feedback } })
 
     // Assemble final ride history
     const rideHistory = rides?.map((ride) => {
@@ -105,14 +110,14 @@ export async function GET(request: NextRequest) {
         drop: locationMap[req?.drop_location_id || 0] || "Unknown",
         driver: {
           name: driver?.USER?.name || "Driver",
-          rating: driver?.rating || 4.5,
         },
         fare: fare?.total || 200,
         payment_status: paymentMap[ride.ride_id]?.status || "paid",
         payment_method: paymentMap[ride.ride_id]?.method || "UPI",
         distance: `${fare?.distanceKm || "5.0"} km`,
         duration: fare?.duration || "20 mins",
-        userRating: ratingMap[ride.ride_id] || undefined,
+        userRating: ratingMap[ride.ride_id]?.score || undefined,
+        userFeedback: ratingMap[ride.ride_id]?.feedback || undefined,
       }
     }) || []
 
