@@ -276,4 +276,79 @@ export default function UserDashboard() {
                       </div>
 
                       <div className="mt-4 flex gap-2">
-                        <a href={`tel:${currentRi
+                        <a href={`tel:${currentRide.driver.phone}`} className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full">
+                            <Phone className="mr-2 h-4 w-4" />
+                            Call
+                          </Button>
+                        </a>
+                        <a href={`sms:${currentRide.driver.phone}`} className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full">
+                            <MessageSquare className="mr-2 h-4 w-4" />
+                            Message
+                          </Button>
+                        </a>
+                      </div>
+                      <p className="mt-2 text-center text-xs text-muted-foreground">{currentRide.driver.phone}</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="mt-0.5 h-5 w-5 text-emerald-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Pickup</p>
+                        <p className="text-sm font-medium text-foreground">{currentRide.pickupLocation}</p>
+                      </div>
+                    </div>
+                    <div className="ml-2.5 h-4 border-l-2 border-dashed border-muted" />
+                    <div className="flex items-start gap-3">
+                      <Navigation className="mt-0.5 h-5 w-5 text-red-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Drop-off</p>
+                        <p className="text-sm font-medium text-foreground">{currentRide.dropLocation}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-lg bg-muted/30 p-3 text-center">
+                      <p className="text-xs text-muted-foreground">Est. Fare</p>
+                      <p className="text-lg font-semibold text-foreground">₹{currentRide.estimatedFare}</p>
+                    </div>
+                    <div className={`rounded-lg p-3 text-center ${currentRide.status === "arrived" ? "bg-emerald-100 dark:bg-emerald-950/30" : "bg-muted/30"}`}>
+                      <p className="text-xs text-muted-foreground">ETA</p>
+                      <p className={`text-lg font-semibold ${currentRide.status === "arrived" ? "text-emerald-600" : "text-foreground"}`}>
+                        {currentRide.status === "arrived" ? "Arrived!" : `${currentRide.etaMinutes} mins`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button asChild className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                    <Link href={`/tracking?id=${currentRide.id}`}>
+                      Track Ride on Map
+                    </Link>
+                  </Button>
+                </div>
+
+              ) : currentRide?.status === "completed" ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                    <Car className="h-8 w-8 text-emerald-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground">Ride Completed!</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Thank you for riding with RideFlow</p>
+                  <div className="mt-4">
+                    <Button asChild variant="outline">
+                      <Link href="/history">View Ride History</Link>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </div>
+  )
+}
