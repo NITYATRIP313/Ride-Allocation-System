@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
+import { supabase } from "@/lib/supabase"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -32,28 +33,93 @@ export default function SignInPage() {
       return
     }
 
+    const parsedId = parseInt(userId.trim())
+    if (isNaN(parsedId)) {
+      toast({
+        title: "Invalid User ID",
+        description: "User ID must be a number.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
-    // Simulate authentication delay
-    setTimeout(() => {
-      setIsLoading(false)
-      
-      // Store role in localStorage for demo purposes
-      localStorage.setItem("userRole", role)
-      localStorage.setItem("userId", userId)
+    try {
+      // Query the USER table in Supabase
+      const { data, error } = await supabase
+        .from("USER")
+        .select("user_id, name, user_type, password")
+        .eq("user_id", parsedId)
+        .single()
+
+      if (error || !data) {
+        toast({
+          title: "User Not Found",
+          description: "No account found with that User ID.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      // Check password
+      if (data.password !== password.trim()) {
+        toast({
+          title: "Wrong Password",
+          description: "The password you entered is incorrect.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      // Check role matches what user selected
+      if (data.user_type !== role) {
+        toast({
+          title: "Wrong Role Selected",
+          description: `This account is registered as a ${data.user_type === "rider" ? "Rider" : "Driver"}. Please select the correct role.`,
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
+
+      // Success — store session info
+      localStorage.setItem("userRole", data.user_type)
+      localStorage.setItem("userId", String(data.user_id))
+      localStorage.setItem("userName", data.name)
 
       toast({
-        title: "Welcome!",
-        description: `Signed in successfully as ${role === "rider" ? "Rider" : "Driver"}.`,
+        title: `Welcome, ${data.name}!`,
+        description: `Signed in successfully as ${data.user_type === "rider" ? "Rider" : "Driver"}.`,
       })
 
       // Redirect based on role
-      if (role === "rider") {
+      if (data.user_type === "rider") {
         router.push("/user")
       } else {
+        // Get driver_id for drivers and store it
+        const { data: driverData } = await supabase
+          .from("DRIVER")
+          .select("driver_id")
+          .eq("user_id", data.user_id)
+          .single()
+
+        if (driverData) {
+          localStorage.setItem("driverId", String(driverData.driver_id))
+        }
         router.push("/driver")
       }
-    }, 1000)
+    } catch {
+      toast({
+        title: "Connection Error",
+        description: "Could not connect to the server. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -94,7 +160,7 @@ export default function SignInPage() {
                 <Input
                   id="userId"
                   type="text"
-                  placeholder="Enter your User ID"
+                  placeholder="Enter your User ID (e.g. 1)"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
                   disabled={isLoading}
@@ -190,6 +256,11 @@ export default function SignInPage() {
               >
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
+
+              {/* Demo hint */}
+              <p className="text-center text-xs text-muted-foreground">
+                Demo riders: ID 1–12 · Demo drivers: ID 13–20
+              </p>
             </form>
           </CardContent>
         </Card>
