@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-
-// This API route interacts with the existing DRIVER table
-// to update driver availability status
+import { supabase } from "@/lib/supabase"
 
 export async function PUT(request: NextRequest) {
   try {
@@ -15,7 +13,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validate status
     const validStatuses = ["available", "busy", "offline"]
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
@@ -24,8 +21,12 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // In production, this would execute:
-    // UPDATE DRIVER SET status = $1, updated_at = NOW() WHERE driver_id = $2
+    const { error } = await supabase
+      .from("DRIVER")
+      .update({ status })
+      .eq("driver_id", parseInt(driver_id))
+
+    if (error) throw error
 
     return NextResponse.json({
       success: true,
@@ -35,10 +36,7 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error updating driver status:", error)
-    return NextResponse.json(
-      { error: "Failed to update driver status" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to update driver status" }, { status: 500 })
   }
 }
 
@@ -47,32 +45,48 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const driver_id = searchParams.get("driver_id")
 
-    // In production, this would execute:
-    // SELECT d.*, v.model, v.license_plate, v.color
-    // FROM DRIVER d
-    // LEFT JOIN VEHICLE v ON d.vehicle_id = v.vehicle_id
-    // WHERE d.driver_id = $1
+    if (!driver_id) {
+      return NextResponse.json({ error: "Missing driver_id" }, { status: 400 })
+    }
 
-    // Mock response
+    const { data, error } = await supabase
+      .from("DRIVER")
+      .select(`
+        driver_id, license_number, experience_years, status, rating, user_id,
+        USER:user_id(name, phone),
+        VEHICLE:driver_id(model, vehicle_number, vehicle_type, color, capacity)
+      `)
+      .eq("driver_id", parseInt(driver_id))
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json({ error: "Driver not found" }, { status: 404 })
+    }
+
+    const user = data.USER as any
+    const vehicle = Array.isArray(data.VEHICLE) ? data.VEHICLE[0] : data.VEHICLE as any
+
     return NextResponse.json({
       success: true,
       driver: {
-        driver_id: driver_id || 1,
-        name: "Michael Chen",
-        status: "available",
-        rating: 4.9,
-        vehicle: {
-          model: "Toyota Camry",
-          license_plate: "ABC 1234",
-          color: "White",
-        },
+        driver_id: data.driver_id,
+        name: user?.name || "Driver",
+        phone: user?.phone || "",
+        status: data.status,
+        rating: data.rating,
+        experience_years: data.experience_years,
+        license_number: data.license_number,
+        vehicle: vehicle ? {
+          model: vehicle.model,
+          license_plate: vehicle.vehicle_number,
+          color: vehicle.color,
+          type: vehicle.vehicle_type,
+          capacity: vehicle.capacity,
+        } : null,
       },
     })
   } catch (error) {
     console.error("Error fetching driver status:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch driver status" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to fetch driver status" }, { status: 500 })
   }
 }
