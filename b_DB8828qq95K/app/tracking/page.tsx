@@ -1,5 +1,7 @@
 "use client"
 
+// FILE PATH: app/tracking/page.tsx
+
 import { Suspense, useState, useEffect } from "react"
 import { Car, MapPin, Navigation, User, Star, Phone, MessageSquare, Clock, CheckCircle2, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -30,16 +32,16 @@ interface RideDetails {
 }
 
 const stages: { key: RideStage; label: string }[] = [
-  { key: "assigned", label: "Driver Assigned" },
-  { key: "arriving", label: "Driver En Route" },
-  { key: "arrived", label: "Driver Arrived" },
-  { key: "started", label: "Ride Started" },
+  { key: "assigned",  label: "Driver Assigned" },
+  { key: "arriving",  label: "Driver En Route" },
+  { key: "arrived",   label: "Driver Arrived" },
+  { key: "started",   label: "Ride Started" },
   { key: "completed", label: "Completed" },
 ]
 
 function TrackingContent() {
   const { currentRide, setCurrentRide } = useRide()
-  
+
   const [ride, setRide] = useState<RideDetails>({
     id: currentRide?.id || "RR-001",
     status: "assigned",
@@ -47,20 +49,20 @@ function TrackingContent() {
     drop: currentRide?.dropLocation || "Drop location",
     driver: currentRide?.driver || {
       name: "Rajesh Kumar",
-      phone: "+91 98765 43210",
+      phone: "9877665544",
       rating: 4.9,
-      vehicle: "Toyota Camry - White",
-      licensePlate: "MH 01 AB 1234",
+      vehicle: "Honda City - Silver",
+      licensePlate: "MH02CD5678",
     },
     fare: currentRide?.estimatedFare || 245,
     distance: "8.2 km",
     etaMinutes: currentRide?.etaMinutes || 8,
-    bookedAt: currentRide?.bookedAt || new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    bookedAt: currentRide?.bookedAt || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
   })
 
   const [hasArrived, setHasArrived] = useState(false)
 
-  // ETA countdown effect - counts down every minute (using seconds for demo)
+  // ETA countdown
   useEffect(() => {
     if (ride.etaMinutes > 0 && !hasArrived) {
       const timer = setInterval(() => {
@@ -69,25 +71,19 @@ function TrackingContent() {
             return { ...prev, etaMinutes: prev.etaMinutes - 1, status: "arriving" }
           } else if (prev.etaMinutes === 1) {
             setHasArrived(true)
-            // Update the global ride context too
             if (currentRide) {
-              setCurrentRide({
-                ...currentRide,
-                status: "arrived",
-                etaMinutes: 0,
-              })
+              setCurrentRide({ ...currentRide, status: "arrived", etaMinutes: 0 })
             }
             return { ...prev, etaMinutes: 0, status: "arrived" }
           }
           return prev
         })
-      }, 60000) // Every minute (change to 5000 for 5-second demo)
-
+      }, 60000)
       return () => clearInterval(timer)
     }
   }, [ride.etaMinutes, hasArrived, currentRide, setCurrentRide])
 
-  // Sync with global ride context
+  // Sync with context
   useEffect(() => {
     if (currentRide) {
       setRide(prev => ({
@@ -101,47 +97,42 @@ function TrackingContent() {
         bookedAt: currentRide.bookedAt || prev.bookedAt,
         status: currentRide.status === "arrived" ? "arrived" : prev.status,
       }))
-      if (currentRide.status === "arrived") {
-        setHasArrived(true)
-      }
+      if (currentRide.status === "arrived") setHasArrived(true)
     }
   }, [currentRide])
 
-  const getStageIndex = (status: RideStage) => {
-    return stages.findIndex(s => s.key === status)
-  }
-
-  const currentStageIndex = getStageIndex(ride.status)
+  const currentStageIndex = stages.findIndex(s => s.key === ride.status)
 
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-3xl font-bold text-transparent">Track Your Ride</h1>
+        <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-3xl font-bold text-transparent">
+          Track Your Ride
+        </h1>
         <p className="mt-2 text-muted-foreground">Ride ID: {ride.id}</p>
       </div>
 
-      {/* Driver Arrived Banner */}
+      {/* Driver arrived banner */}
       {hasArrived && (
-        <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 animate-pulse">
+        <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 animate-pulse dark:bg-emerald-950/30 dark:border-emerald-900">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white">
               <Bell className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-lg font-semibold text-emerald-700">Your Driver Has Arrived!</p>
-              <p className="text-sm text-emerald-600">Please meet {ride.driver.name} at {ride.pickup}</p>
+              <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-400">Your Driver Has Arrived!</p>
+              <p className="text-sm text-emerald-600 dark:text-emerald-500">Please meet {ride.driver.name} at {ride.pickup}</p>
             </div>
           </div>
         </div>
       )}
 
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Map Placeholder */}
+        {/* ── Map ── */}
         <div className="lg:col-span-2">
           <Card className="overflow-hidden border-border bg-card shadow-lg">
             <CardContent className="p-0">
               <div className="relative aspect-video bg-muted">
-                {/* Map placeholder with visual design */}
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5">
                   {/* Grid lines */}
                   <div className="absolute inset-0 opacity-20">
@@ -152,14 +143,14 @@ function TrackingContent() {
                       <div key={`v-${i}`} className="absolute h-full w-px bg-muted-foreground/30" style={{ left: `${(i + 1) * 10}%` }} />
                     ))}
                   </div>
-                  
+
                   {/* Pickup marker */}
                   <div className="absolute left-[20%] top-[30%] flex flex-col items-center">
-                    <div className={`flex h-10 w-10 items-center justify-center rounded-full shadow-lg ${hasArrived ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'} text-white`}>
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-full shadow-lg text-white ${hasArrived ? "bg-emerald-500 animate-pulse" : "bg-emerald-500"}`}>
                       <MapPin className="h-5 w-5" />
                     </div>
                     <div className="mt-2 max-w-[120px] rounded-lg bg-card px-2 py-1 text-xs font-medium shadow text-center truncate">
-                      {ride.pickup.length > 20 ? ride.pickup.substring(0, 20) + '...' : ride.pickup}
+                      {ride.pickup.length > 20 ? ride.pickup.substring(0, 20) + "…" : ride.pickup}
                     </div>
                   </div>
 
@@ -175,17 +166,13 @@ function TrackingContent() {
                     />
                   </svg>
 
-                  {/* Driver/Car marker - moves closer to pickup when arriving */}
-                  <div 
-                    className={`absolute flex flex-col items-center transition-all duration-1000 ${
-                      hasArrived 
-                        ? 'left-[20%] top-[30%]' 
-                        : ride.status === 'arriving' 
-                          ? 'left-[30%] top-[38%]' 
-                          : 'left-[45%] top-[48%]'
-                    }`}
-                  >
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground shadow-lg ${!hasArrived ? 'animate-pulse' : ''}`}>
+                  {/* Car marker — animates toward pickup */}
+                  <div className={`absolute flex flex-col items-center transition-all duration-1000 ${
+                    hasArrived ? "left-[20%] top-[30%]" :
+                    ride.status === "arriving" ? "left-[30%] top-[38%]" :
+                    "left-[45%] top-[48%]"
+                  }`}>
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-secondary-foreground shadow-lg ${!hasArrived ? "animate-pulse" : ""}`}>
                       <Car className="h-6 w-6" />
                     </div>
                     {!hasArrived && (
@@ -201,19 +188,19 @@ function TrackingContent() {
                       <Navigation className="h-5 w-5" />
                     </div>
                     <div className="mt-2 max-w-[120px] rounded-lg bg-card px-2 py-1 text-xs font-medium shadow text-center truncate">
-                      {ride.drop.length > 20 ? ride.drop.substring(0, 20) + '...' : ride.drop}
+                      {ride.drop.length > 20 ? ride.drop.substring(0, 20) + "…" : ride.drop}
                     </div>
                   </div>
                 </div>
 
-                {/* Map overlay info */}
+                {/* Bottom overlay */}
                 <div className="absolute bottom-4 left-4 right-4">
                   <div className="flex items-center justify-between rounded-xl bg-card/95 p-4 shadow-lg backdrop-blur-sm">
                     <div>
                       <p className="text-sm text-muted-foreground">
                         {hasArrived ? "Status" : "Driver arriving in"}
                       </p>
-                      <p className={`text-xl font-bold ${hasArrived ? 'text-emerald-600' : 'text-foreground'}`}>
+                      <p className={`text-xl font-bold ${hasArrived ? "text-emerald-600" : "text-foreground"}`}>
                         {hasArrived ? "Driver Arrived!" : `${ride.etaMinutes} mins`}
                       </p>
                     </div>
@@ -228,9 +215,9 @@ function TrackingContent() {
           </Card>
         </div>
 
-        {/* Ride Details */}
+        {/* ── Right sidebar ── */}
         <div className="space-y-6">
-          {/* Status Progress */}
+          {/* Status progress */}
           <Card className="border-border bg-card shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center justify-between text-lg">
@@ -243,8 +230,6 @@ function TrackingContent() {
                 {stages.map((stage, index) => {
                   const isCompleted = index < currentStageIndex
                   const isCurrent = index === currentStageIndex
-                  const isPending = index > currentStageIndex
-
                   return (
                     <div key={stage.key} className="flex items-center gap-3">
                       <div className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
@@ -252,23 +237,13 @@ function TrackingContent() {
                         isCurrent ? "bg-primary text-primary-foreground" :
                         "bg-muted text-muted-foreground"
                       }`}>
-                        {isCompleted ? (
-                          <CheckCircle2 className="h-4 w-4" />
-                        ) : (
-                          <span className="text-sm font-medium">{index + 1}</span>
-                        )}
+                        {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-sm font-medium">{index + 1}</span>}
                       </div>
-                      <span className={`text-sm font-medium ${
-                        isCompleted || isCurrent ? "text-foreground" : "text-muted-foreground"
-                      }`}>
+                      <span className={`text-sm font-medium ${isCompleted || isCurrent ? "text-foreground" : "text-muted-foreground"}`}>
                         {stage.label}
                       </span>
-                      {isCurrent && !hasArrived && (
-                        <span className="ml-auto text-xs text-primary">{ride.etaMinutes} min</span>
-                      )}
-                      {stage.key === "arrived" && hasArrived && (
-                        <span className="ml-auto text-xs text-emerald-600">Now</span>
-                      )}
+                      {isCurrent && !hasArrived && <span className="ml-auto text-xs text-primary">{ride.etaMinutes} min</span>}
+                      {stage.key === "arrived" && hasArrived && <span className="ml-auto text-xs text-emerald-600">Now</span>}
                     </div>
                   )
                 })}
@@ -276,7 +251,7 @@ function TrackingContent() {
             </CardContent>
           </Card>
 
-          {/* Driver Info */}
+          {/* Driver info */}
           <Card className="border-border bg-card shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -293,27 +268,33 @@ function TrackingContent() {
                   <h4 className="font-semibold text-foreground">{ride.driver.name}</h4>
                   <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
                     <Star className="h-4 w-4 fill-secondary text-secondary" />
-                    <span>{ride.driver.rating}</span>
+                    <span>{ride.driver.rating.toFixed(1)}</span>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{ride.driver.vehicle}</p>
                   <p className="text-sm font-medium text-foreground">{ride.driver.licensePlate}</p>
                 </div>
               </div>
 
+              {/* Real phone on both buttons */}
               <div className="mt-4 flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <Phone className="mr-2 h-4 w-4" />
-                  Call
-                </Button>
-                <Button variant="outline" size="sm" className="flex-1">
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Message
-                </Button>
+                <a href={`tel:${ride.driver.phone}`} className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <Phone className="mr-2 h-4 w-4" />
+                    Call
+                  </Button>
+                </a>
+                <a href={`sms:${ride.driver.phone}`} className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full">
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    Message
+                  </Button>
+                </a>
               </div>
+              <p className="mt-2 text-center text-xs text-muted-foreground">{ride.driver.phone}</p>
             </CardContent>
           </Card>
 
-          {/* Route Info */}
+          {/* Route */}
           <Card className="border-border bg-card shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
