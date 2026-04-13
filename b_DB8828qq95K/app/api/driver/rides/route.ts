@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-
-// This API route fetches assigned rides for a driver from the RIDE table
+import { supabase } from "@/lib/supabase"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,42 +13,69 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // In production, this would execute:
-    // SELECT r.*, u.name as passenger_name, u.phone as passenger_phone,
-    //        l1.address as pickup_address, l2.address as drop_address,
-    //        f.amount as fare_amount
-    // FROM RIDE r
-    // JOIN USER u ON r.user_id = u.user_id
-    // JOIN LOCATION l1 ON r.pickup_location_id = l1.location_id
-    // JOIN LOCATION l2 ON r.drop_location_id = l2.location_id
-    // LEFT JOIN FARE f ON r.ride_id = f.ride_id
-    // WHERE r.driver_id = $1 AND r.status IN ('assigned', 'started')
+    const { data: rides, error } = await supabase
+      .from("RIDE")
+      .select(`
+        ride_id, start_time, end_time, ride_status, request_id, driver_id,
+        RIDE_REQUEST:request_id(
+          request_id, status, user_id, pickup_location_id, drop_location_id,
+          USER:user_id(name, phone)
+        )
+      `)
+      .eq("driver_id", parseInt(driver_id))
+      .in("ride_status", ["assigned", "started"])
 
-    // Mock response
-    return NextResponse.json({
-      success: true,
-      rides: [
-        {
-          ride_id: "RD-001",
-          passenger: {
-            name: "Sarah Johnson",
-            phone: "+1 (555) 987-6543",
-            rating: 4.7,
-          },
-          pickup: "123 Main Street",
-          drop: "456 Oak Avenue",
-          fare: 24.50,
-          status: "assigned",
-          created_at: new Date().toISOString(),
-        },
-      ],
+    if (error) throw error
+
+    // Fetch location info
+    const allLocationIds: number[] = []
+    rides?.forEach((r: any) => {
+      if (r.RIDE_REQUEST?.pickup_location_id) allLocationIds.push(r.RIDE_REQUEST.pickup_location_id)
+      if (r.RIDE_REQUEST?.drop_location_id) allLocationIds.push(r.RIDE_REQUEST.drop_location_id)
     })
+
+    const { data: locations } = await supabase
+      .from("LOCATION")
+      .select("location_id, address")
+      .in("location_id", allLocationIds)
+
+    const locationMap: Record<number, string> = {}
+    locations?.forEach((l) => { locationMap[l.location_id] = l.address })
+
+    // Fetch fares
+    const rideIds = rides?.map((r) => r.ride_id) || []
+    const { data: fares } = await supabase
+      .from("FARE")
+      .select("ride_id, base_amount, distance_charge, time_charge, surge_multiplier")
+      .in("ride_id", rideIds)
+
+    const fareMap: Record<number, number> = {}
+    fares?.forEach((f) => {
+      fareMap[f.ride_id] = Math.round((f.base_amount + f.distance_charge + f.time_charge) * f.surge_multiplier)
+    })
+
+    const formatted = rides?.map((ride: any) => {
+      const req = ride.RIDE_REQUEST
+      const user = req?.USER
+      return {
+        ride_id: `RD-${ride.ride_id.toString().padStart(3, "0")}`,
+        passenger: {
+          name: user?.name || "Passenger",
+          phone: user?.phone || "",
+          rating: 4.5,
+        },
+        pickup: locationMap[req?.pickup_location_id] || "Unknown pickup",
+        drop: locationMap[req?.drop_location_id] || "Unknown drop",
+        fare: fareMap[ride.ride_id] || 200,
+        status: ride.ride_status,
+        created_at: ride.start_time,
+      }
+    }) || []
+
+    return NextResponse.json({ success: true, rides: formatted })
   } catch (error) {
     console.error("Error fetching driver rides:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch driver rides" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to fetch driver rides" }, { status: 500 })
   }
 }
 
@@ -65,7 +91,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validate status
     const validStatuses = ["started", "completed", "cancelled"]
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
@@ -74,24 +99,32 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // In production, this would execute:
-    // UPDATE RIDE SET status = $1, updated_at = NOW()
-    // WHERE ride_id = $2 AND driver_id = $3
+    const updateData: Record<string, unknown> = { ride_status: status }
+    if (status === "completed") updateData.end_time = new Date().toISOString()
 
-    // If completing ride, also update driver status back to available:
-    // UPDATE DRIVER SET status = 'available' WHERE driver_id = $3
+    const { error: rideError } = await supabase
+      .from("RIDE")
+      .update(updateData)
+      .eq("ride_id", parseInt(ride_id))
+
+    if (rideError) throw rideError
+
+    // If completed, mark driver as available again
+    if (status === "completed" && driver_id) {
+      await supabase
+        .from("DRIVER")
+        .update({ status: "available" })
+        .eq("driver_id", parseInt(driver_id))
+    }
 
     return NextResponse.json({
       success: true,
       ride_id,
       status,
-      message: `Ride ${status === "started" ? "started" : status === "completed" ? "completed" : "cancelled"} successfully`,
+      message: `Ride ${status} successfully`,
     })
   } catch (error) {
     console.error("Error updating ride:", error)
-    return NextResponse.json(
-      { error: "Failed to update ride" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to update ride" }, { status: 500 })
   }
 }
